@@ -1,0 +1,39 @@
+
+
+# 依赖
+node_modules/
+.npm/
+
+# 构建产物
+dist/
+.cache/
+*.asar
+
+# 若要把打包好的安装程序放到仓库根目录一起上传，删掉下面两行（单文件需小于 100 MB）
+*.exe
+*.zip
+
+# 本地运行数据：npm start 时 resolveDataDir() 会写在源码根目录
+data/
+workclock.config.json
+*.bak.json
+工时打卡备份-*.json
+工时统计*.csv
+
+# 密钥与本机配置（按需）
+.env
+.env.*
+!.env.example
+.npmrc
+*.pfx
+*.p12
+
+# 编辑器 / 系统 / 日志
+.vscode/
+.idea/
+*.swp
+*.log
+npm-debug.log*
+Thumbs.db
+.DS_Store
+coverage/
