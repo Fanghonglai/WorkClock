@@ -429,13 +429,20 @@
 
   function renderSettings() {
     $('#dataDir').textContent = info.dataDir || '—';
-    $('#appVersion').textContent = '工时打卡 v' + (info.version || '?') + ' · 数据只保存在本机';
     const trayToggle = $('#closeToTray');
-    if (trayToggle) trayToggle.checked = !(state.settings && state.settings.closeToTray === false);
+    const trayOn = !(state.settings && state.settings.closeToTray === false);
+    if (trayToggle) trayToggle.checked = trayOn;
 
     if (!$('#rateDate').value) $('#rateDate').value = currentDay;
 
     const todayRate = latestRateForToday();
+    const sumRate = $('#setSummaryRate');
+    if (sumRate) sumRate.textContent = todayRate ? ('当前 ' + money(todayRate.rate) + '/小时') : '未设置时薪';
+    const sumWin = $('#setSummaryWindow');
+    if (sumWin) sumWin.textContent = trayOn ? '关闭时最小化到托盘' : '关闭时直接退出';
+    const sumData = $('#setSummaryData');
+    if (sumData && !sumData.textContent && info.dataDir) sumData.textContent = info.dataDir;
+
     $('#rateValue').placeholder = '例如 30.00';
     const rows = state.rates.length
       ? state.rates.map(function (r) {
@@ -455,6 +462,8 @@
     const list = $('#backupList');
     try {
       const backups = await api.listBackups();
+      const sumData = $('#setSummaryData');
+      if (sumData) sumData.textContent = backups.length + ' 份本地备份';
       list.innerHTML = backups.length
         ? backups.map(function (b) {
           return '<li class="backup-row"><span class="b-name">' + esc(b.name) + '</span>' +
@@ -808,6 +817,35 @@
     $$('.nav-item').forEach(function (b) {
       b.addEventListener('click', function () { setView(b.dataset.view); });
     });
+
+    /* 设置页分组折叠：只切换显示状态，DOM 与表单事件绑定保持不变 */
+    (function initSettingsGroups() {
+      const KEY = 'workclock.settings.groups';
+      const groups = $$('.set-group', $('#settingsStack'));
+      if (!groups.length) return;
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }
+      const apply = function (g, open) {
+        g.classList.toggle('open', open);
+        const head = $('.set-group-head', g);
+        if (head) head.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      const persist = function () {
+        const map = {};
+        groups.forEach(function (g) { map[g.dataset.group] = g.classList.contains('open'); });
+        try { localStorage.setItem(KEY, JSON.stringify(map)); } catch (e) { /* 存储不可用时忽略 */ }
+      };
+      groups.forEach(function (g) {
+        if (saved && Object.prototype.hasOwnProperty.call(saved, g.dataset.group)) {
+          apply(g, !!saved[g.dataset.group]);
+        }
+        const head = $('.set-group-head', g);
+        if (head) head.addEventListener('click', function () {
+          apply(g, !g.classList.contains('open'));
+          persist();
+        });
+      });
+    })();
 
     $('#btnPunch').addEventListener('click', async function () {
       if (busy) return;

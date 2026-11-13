@@ -37,14 +37,14 @@ $uninst = Join-Path $obj 'Uninstall.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Uninstall 编译失败' }
 
 Write-Host '5/5 编译安装程序'
-$setup = Join-Path $out 'WorkClock-1.0.5-Setup.exe'
+$setup = Join-Path $out 'WorkClock-1.1.0-Setup.exe'
 & $csc @common "/out:$setup" '/r:System.IO.Compression.dll' '/r:System.IO.Compression.FileSystem.dll' `
   "/resource:$zip,payload.zip" "/resource:$uninst,uninstall.exe" `
   (Join-Path $root 'installer\Common.cs') (Join-Path $root 'installer\Setup.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Setup 编译失败' }
 
 Write-Host '生成绿色便携版 zip 包'
-$portableZip = Join-Path $out 'WorkClock-1.0.5-win-x64.zip'
+$portableZip = Join-Path $out 'WorkClock-1.1.0-win-x64.zip'
 Remove-Item -Force -ErrorAction SilentlyContinue $portableZip
 Copy-Item $zip $portableZip -Force
 

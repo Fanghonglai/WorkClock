@@ -1,6 +1,6 @@
 # 工时打卡 Work Clock
 
-![version](https://img.shields.io/badge/version-1.0.5-blue)
+![version](https://img.shields.io/badge/version-1.1.0-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%2F%2011%20x64-lightgrey)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
@@ -32,8 +32,8 @@
 ## 快速开始
 
 1. 从 [Releases](https://github.com/Fanghonglai/WorkCloock/releases) 下载：
-   - **安装版**：`WorkClock-1.0.5-Setup.exe`，双击运行安装向导，可在向导中自主选择安装位置与数据存放位置；
-   - **绿色免安装版**：`WorkClock-1.0.5-win-x64.zip`，解压即用。
+   - **安装版**：`WorkClock-1.1.0-Setup.exe`，双击运行安装向导，可在向导中自主选择安装位置与数据存放位置；
+   - **绿色免安装版**：`WorkClock-1.1.0-win-x64.zip`，解压即用。
 2. 第一次打开会弹出「先设置你的时薪」，填上时薪（元/小时）和生效日期，保存。
 3. 到公司点「上班打卡」，下班点「下班打卡」。忘了打卡就在日历页或今日页点「补录时段」。
 4. 月底打开「统计」页，看本月总工时和预计收入，需要的话点「导出 CSV」。
@@ -188,7 +188,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build-installer.ps1
 
 ## 版本与更新
 
-当前版本 **1.0.5**，变更记录见 [CHANGELOG.md](CHANGELOG.md)。遇到问题或有建议，欢迎提 [GitHub Issue](https://github.com/Fanghonglai/WorkCloock/issues)。
+当前版本 **1.1.0**，变更记录见 [CHANGELOG.md](CHANGELOG.md)。遇到问题或有建议，欢迎提 [GitHub Issue](https://github.com/Fanghonglai/WorkCloock/issues)。
 
 ## 许可
 

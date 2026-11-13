@@ -1,12 +1,10 @@
-
-
 # 依赖
 node_modules/
 .npm/
 
-# 构建产物
-dist/
-.cache/
+# 构建产物（前导 / 只匹配项目根，避免误伤 src/、docs/ 下的同名目录）
+/dist/
+/.cache/
 *.asar
 
 # 安装包构建中间产物：build-installer.ps1 / asar.ps1 会在项目根生成
@@ -14,16 +12,19 @@ dist/
 /app/
 /obj/
 /asar-header.json
+/installer/bin/
+/installer/obj/
 
 # 本机工作记忆（可选：想把项目笔记一起纳入版本管理就删掉这一行）
 /.workbuddy/
 
 # 安装包与压缩包：作为 GitHub Releases 资产上传，不进 Git 仓库
+# 这是全局规则；若以后要提交某个 exe/zip，用 !路径 单独放行
 *.exe
 *.zip
 
 # 本地运行数据：npm start 时 resolveDataDir() 会写在源码根目录
-data/
+/data/
 workclock.config.json
 *.bak.json
 工时打卡备份-*.json
@@ -41,8 +42,22 @@ workclock.config.json
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
 *.log
 npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 Thumbs.db
+ehthumbs.db
+desktop.ini
 .DS_Store
 coverage/
+.nyc_output/
+*.tsbuildinfo
+.eslintcache
+
+# C# 安装器编译产物
+*.pdb
+*.user
+*.suo
