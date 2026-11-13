@@ -69,6 +69,15 @@
           <div class="hero-right">
             <div class="clock-time" id="clockNow">--:--:--</div>
             <div class="clock-date" id="clockDate"></div>
+            <div class="punch-loc">
+              <div class="punch-loc-input-wrap">
+                <span class="punch-loc-icon" aria-hidden="true">📍</span>
+                <input id="punchLocation" class="punch-loc-input" list="locOptions" spellcheck="false"
+                       placeholder="本次打卡地点（选填，如：公司 / 客户现场）">
+                <button type="button" class="punch-loc-clear hidden" id="btnClearPunchLoc" title="清空地点">×</button>
+              </div>
+              <div class="punch-loc-chips" id="punchLocChips"></div>
+            </div>
             <button class="btn primary big" id="btnPunch">上班打卡</button>
             <div class="clock-hint">半点刻度 ±10 分钟归集 · 范围外由你选时间点</div>
           </div>
@@ -109,7 +118,7 @@
             <div class="loc-row">
               <span class="loc-icon">📍</span>
               <input id="dayLocation" class="loc-input" list="locOptions" spellcheck="false"
-                     placeholder="上班地点，如：公司 / 客户现场">
+                     placeholder="全天默认地点（各时段未单独选时使用）">
               <span class="muted small" id="locStatus"></span>
             </div>
             <textarea id="dayNote" class="note" spellcheck="false"

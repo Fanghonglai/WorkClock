@@ -93,7 +93,11 @@ function normalizeState(raw) {
     let id = typeof e.id === 'string' && e.id ? e.id : genId('e');
     while (ids[id]) id = genId('e');
     ids[id] = true;
-    entries.push({ id: id, startAt: e.startAt, endAt: endIso });
+    const entry = { id: id, startAt: e.startAt, endAt: endIso };
+    if (typeof e.location === 'string' && e.location.trim()) {
+      entry.location = e.location.trim();
+    }
+    entries.push(entry);
   });
   entries.sort(function (a, b) { return C.entryStartMs(a) - C.entryStartMs(b); });
 
@@ -295,7 +299,7 @@ class Store {
     }
   }
 
-  clockIn(nowDate) {
+  clockIn(nowDate, location) {
     this._requireLoaded();
     const source = typeof nowDate === 'string' ? C.parseLocal(nowDate) : nowDate;
     const now = C.roundPunchDate(source || new Date());
@@ -304,6 +308,8 @@ class Store {
       throw new StoreError('已有未下班的打卡（' + C.formatTimeOfDay(open.startAt) + ' 上班），请先下班打卡或作废该记录');
     }
     const entry = { id: genId('e'), startAt: C.toLocalIso(now), endAt: null };
+    const loc = typeof location === 'string' ? location.trim() : '';
+    if (loc) entry.location = loc;
     this.state.entries.push(entry);
     this.state.entries = C.sortEntries(this.state.entries);
     this._write(this.state);
@@ -333,6 +339,8 @@ class Store {
     if (!v.ok) throw new StoreError(v.error);
     this._assertNoOverlap(v.startAt, v.endAt, null);
     const entry = { id: genId('e'), startAt: v.startAt, endAt: v.endAt };
+    const loc = input && typeof input.location === 'string' ? input.location.trim() : '';
+    if (loc) entry.location = loc;
     this.state.entries.push(entry);
     this.state.entries = C.sortEntries(this.state.entries);
     this._write(this.state);
@@ -348,7 +356,23 @@ class Store {
     this._assertNoOverlap(v.startAt, v.endAt, id);
     entry.startAt = v.startAt;
     entry.endAt = v.endAt;
+    if (input && input.location !== undefined) {
+      const loc = typeof input.location === 'string' ? input.location.trim() : '';
+      if (loc) entry.location = loc;
+      else delete entry.location;
+    }
     this.state.entries = C.sortEntries(this.state.entries);
+    this._write(this.state);
+    return entry;
+  }
+
+  setEntryLocation(id, text) {
+    this._requireLoaded();
+    const entry = this.state.entries.filter(function (e) { return e.id === id; })[0];
+    if (!entry) throw new StoreError('找不到这条打卡记录');
+    const value = String(text == null ? '' : text).trim();
+    if (value) entry.location = value;
+    else delete entry.location;
     this._write(this.state);
     return entry;
   }

@@ -232,3 +232,15 @@ test('validateEntryInput 的 round 选项：窗口内归刻度，窗口外按填
   assert.equal(C.validateEntryInput({ date: '2026-11-04', startTime: '10:05', endTime: '10:08' }, { round: true }).ok, false);
   assert.equal(C.validateEntryInput({ date: '2026-11-04', startTime: '10:14', endTime: '10:16' }).ok, true);
 });
+
+test('dayLocationsText 按时段去重汇总地点并回退历史按天地点', () => {
+  const entries = [
+    { id: '1', startAt: '2026-11-13T09:00:00', endAt: '2026-11-13T12:00:00', location: '公司' },
+    { id: '2', startAt: '2026-11-13T13:30:00', endAt: '2026-11-13T18:00:00', location: '客户现场' },
+    { id: '3', startAt: '2026-11-13T19:00:00', endAt: '2026-11-13T20:00:00', location: '公司' },
+    { id: '4', startAt: '2026-11-14T09:00:00', endAt: '2026-11-14T18:00:00' }
+  ];
+  assert.equal(C.dayLocationsText(entries, '2026-11-13', '默认地点'), '公司 / 客户现场');
+  assert.equal(C.dayLocationsText(entries, '2026-11-14', '默认地点'), '默认地点');
+  assert.equal(C.dayLocationsText(entries, '2026-11-15', ''), '');
+});

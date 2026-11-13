@@ -17,11 +17,12 @@ function call(channel) {
 contextBridge.exposeInMainWorld('workclock', {
   info: function () { return call('app:info'); },
   getState: function () { return call('state:get'); },
-  clockIn: function (iso) { return iso ? call('clock:in', iso) : call('clock:in'); },
+  clockIn: function (iso, location) { return call('clock:in', iso || null, location || ''); },
   clockOut: function (iso) { return iso ? call('clock:out', iso) : call('clock:out'); },
   setPunchTime: function (id, which, isoLocal) { return call('punch:set-time', id, which, isoLocal); },
   addEntry: function (input) { return call('entry:add', input); },
   updateEntry: function (id, input) { return call('entry:update', id, input); },
+  setEntryLocation: function (id, text) { return call('entry:set-location', id, text); },
   deleteEntry: function (id) { return call('entry:delete', id); },
   setNote: function (dayKey, text) { return call('note:set', dayKey, text); },
   setLocation: function (dayKey, text) { return call('location:set', dayKey, text); },

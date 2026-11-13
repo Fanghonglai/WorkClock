@@ -396,6 +396,25 @@
     return start + '–' + end + next;
   }
 
+  /**
+   * 汇总某天所有打卡时段上的地点（按时间顺序去重，用 " / " 连接）；
+   * 若各时段均未单独填写地点，则回退到历史按天记录的 fallbackLocation。
+   */
+  function dayLocationsText(entries, dayKey, fallbackLocation) {
+    var list = entriesForDay(entries, dayKey);
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var loc = typeof list[i].location === 'string' ? list[i].location.trim() : '';
+      if (loc && !seen[loc]) {
+        seen[loc] = true;
+        out.push(loc);
+      }
+    }
+    if (out.length) return out.join(' / ');
+    return typeof fallbackLocation === 'string' ? fallbackLocation.trim() : '';
+  }
+
   return {
     MAX_MS: MAX_MS,
     HOUR_MS: HOUR_MS,
@@ -441,6 +460,7 @@
     formatHoursDecimal: formatHoursDecimal,
     formatMoney: formatMoney,
     formatTimeOfDay: formatTimeOfDay,
-    formatRange: formatRange
+    formatRange: formatRange,
+    dayLocationsText: dayLocationsText
   };
 });

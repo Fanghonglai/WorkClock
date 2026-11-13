@@ -303,3 +303,27 @@ test('关闭到托盘设置默认开启并持久化', () => {
     assert.equal(reload(dir).state.settings.closeToTray, true);
   });
 });
+
+test('每次打卡时段可独立选择与修改地点并持久化', () => {
+  withStore((store, dir) => {
+    const am = store.clockIn(new Date(2026, 10, 13, 9, 0, 0), '公司 3F');
+    assert.equal(am.location, '公司 3F');
+    store.setEntryLocation(am.id, '公司 5F');
+    assert.equal(store.state.entries[0].location, '公司 5F');
+    store.clockOut(new Date(2026, 10, 13, 12, 0, 0));
+
+    const pm = store.clockIn(new Date(2026, 10, 13, 13, 30, 0), '客户现场');
+    assert.equal(pm.location, '客户现场');
+    store.clockOut(new Date(2026, 10, 13, 18, 0, 0));
+
+    const extra = store.addEntry({ date: '2026-11-14', startTime: '09:00', endTime: '12:00', location: '居家办公' });
+    assert.equal(extra.location, '居家办公');
+    store.updateEntry(extra.id, { date: '2026-11-14', startTime: '09:00', endTime: '12:30', location: '' });
+    assert.equal(store.state.entries.find((e) => e.id === extra.id).location, undefined);
+
+    const loaded = reload(dir);
+    assert.equal(loaded.state.entries[0].location, '公司 5F');
+    assert.equal(loaded.state.entries[1].location, '客户现场');
+    assert.equal(loaded.state.entries[2].location, undefined);
+  });
+});

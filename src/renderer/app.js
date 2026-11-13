@@ -17,6 +17,7 @@
   let view = 'today';
   let noteTimer = null;
   let locTimer = null;
+  let punchLocTimer = null;
   let toastTimer = null;
   let busy = false;
 
@@ -184,11 +185,12 @@
     ul.innerHTML = list.map(function (e) {
       const dur = C.entryDurationMs(e, now);
       const isOpen = e.endAt == null;
+      const locBadge = e.location ? '<span class="seg-loc">📍 ' + esc(e.location) + '</span>' : '';
       return '<li class="segment' + (isOpen ? ' open' : '') + '">' +
         '<span class="seg-dot"></span>' +
         '<div class="seg-main">' +
         '<div class="seg-range">' + esc(C.formatRange(e)) + (isOpen ? '<span class="tag">进行中</span>' : '') + '</div>' +
-        '<div class="seg-meta">' + esc(hoursText(dur)) + (info2 ? ' · ' + money(C.dayEarningsExact(dur, info2.rate)) : '') + '</div>' +
+        '<div class="seg-meta"><span>' + esc(hoursText(dur)) + (info2 ? ' · ' + money(C.dayEarningsExact(dur, info2.rate)) : '') + '</span>' + locBadge + '</div>' +
         '</div>' +
         '<div class="seg-actions">' +
         '<button class="btn ghost mini" data-act="edit-entry" data-id="' + esc(e.id) + '">编辑</button>' +
@@ -197,6 +199,19 @@
     }).join('');
     $('#todayEmpty').classList.toggle('hidden', list.length > 0);
     $('#todaySegmentCount').textContent = list.length ? list.length + ' 段' : '';
+
+    const punchLoc = $('#punchLocation');
+    if (punchLoc) {
+      if (open) {
+        punchLoc.placeholder = '当前时段地点（修改即保存）';
+        if (document.activeElement !== punchLoc) {
+          punchLoc.value = open.location || '';
+        }
+      } else {
+        punchLoc.placeholder = '本次打卡地点（选填，如：公司 / 客户现场）';
+      }
+      syncPunchLocUi();
+    }
 
     const note = $('#dayNote');
     if (document.activeElement !== note) {
@@ -211,16 +226,44 @@
     buildLocationOptions();
   }
 
-  function buildLocationOptions() {
+  function collectRecentLocations() {
     const seen = {};
     const arr = [];
+    const sortedEntries = C.sortEntries(state.entries);
+    for (let i = sortedEntries.length - 1; i >= 0; i--) {
+      const v = String(sortedEntries[i].location || '').trim();
+      if (v && !seen[v]) { seen[v] = true; arr.push(v); }
+    }
     Object.keys(state.locations).sort().reverse().forEach(function (k) {
       const v = String(state.locations[k] || '').trim();
       if (v && !seen[v]) { seen[v] = true; arr.push(v); }
     });
+    return arr;
+  }
+
+  function syncPunchLocUi() {
+    const input = $('#punchLocation');
+    const clearBtn = $('#btnClearPunchLoc');
+    if (!input) return;
+    const val = input.value.trim();
+    if (clearBtn) clearBtn.classList.toggle('hidden', !val);
+    $$('#punchLocChips .loc-chip').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.loc === val);
+    });
+  }
+
+  function buildLocationOptions() {
+    const arr = collectRecentLocations();
     $('#locOptions').innerHTML = arr.slice(0, 10).map(function (v) {
       return '<option value="' + esc(v) + '"></option>';
     }).join('');
+    const chipsBox = $('#punchLocChips');
+    if (chipsBox) {
+      const cur = ($('#punchLocation') && $('#punchLocation').value || '').trim();
+      chipsBox.innerHTML = arr.slice(0, 5).map(function (v) {
+        return '<button type="button" class="loc-chip' + (cur === v ? ' active' : '') + '" data-loc="' + esc(v) + '" title="' + esc(v) + '">' + esc(v) + '</button>';
+      }).join('');
+    }
   }
 
   function renderCalendar() {
@@ -261,20 +304,22 @@
     const info2 = rateInfoFor(day);
     const earn = info2 ? C.dayEarningsExact(total, info2.rate) : null;
     const note = state.notes[day] || '';
+    const dayLoc = C.dayLocationsText(state.entries, day, state.locations[day]);
 
     let html = '<div class="dd-head"><h2>' + day.replace(/-/g, ' / ') + '</h2>' +
       '<span class="muted">' + esc(C.weekdayName(day)) + (day === currentDay ? ' · 今天' : '') + '</span></div>' +
       '<div class="dd-total">' + (total > 0 ? esc(hoursText(total)) : '0 分钟') + '</div>' +
       '<div class="dd-sub">' + (earn == null ? '未设置时薪' : '预计 ' + money(earn) + '（' + money(info2.rate) + '/小时）') + '</div>' +
-      (state.locations[day] ? '<div class="dd-loc">📍 ' + esc(state.locations[day]) + '</div>' : '') +
+      (dayLoc ? '<div class="dd-loc">📍 ' + esc(dayLoc) + '</div>' : '') +
       '<div class="dd-sep"></div>';
 
     if (list.length) {
       html += '<ul class="segments">' + list.map(function (e) {
+        const locBadge = e.location ? '<span class="seg-loc">📍 ' + esc(e.location) + '</span>' : '';
         return '<li class="segment' + (e.endAt == null ? ' open' : '') + '">' +
           '<span class="seg-dot"></span>' +
           '<div class="seg-main"><div class="seg-range">' + esc(C.formatRange(e)) + '</div>' +
-          '<div class="seg-meta">' + esc(C.formatDuration(C.entryDurationMs(e, now))) + '</div></div>' +
+          '<div class="seg-meta"><span>' + esc(C.formatDuration(C.entryDurationMs(e, now))) + '</span>' + locBadge + '</div></div>' +
           '<div class="seg-actions">' +
           '<button class="btn ghost mini" data-act="edit-entry" data-id="' + esc(e.id) + '">编辑</button>' +
           '<button class="btn ghost mini" data-act="del-entry" data-id="' + esc(e.id) + '">删除</button>' +
@@ -313,11 +358,12 @@
 
     let tb = rows.map(function (d) {
       const ranges = d.entries.map(function (e) { return C.formatRange(e); }).join('、');
+      const dayLoc = C.dayLocationsText(d.entries, d.day, state.locations[d.day]);
       return '<tr>' +
         '<td>' + d.day.slice(5) + '</td>' +
         '<td class="' + (d.isWeekend ? 'wk' : '') + '">' + esc(d.weekday) + '</td>' +
         '<td>' + esc(ranges) + '</td>' +
-        '<td>' + esc(state.locations[d.day] || '') + '</td>' +
+        '<td>' + esc(dayLoc) + '</td>' +
         '<td class="num">' + C.formatHoursDecimal(d.ms).toFixed(2) + ' h</td>' +
         '<td class="num">' + (d.rate == null ? '—' : esc(money(d.rate))) + '</td>' +
         '<td class="num">' + (d.earnings == null ? '—' : esc(money(d.earnings))) + '</td>' +
@@ -619,7 +665,13 @@
   function openEntryDialog(opts) {
     const entry = opts && opts.entry;
     const date = entry ? C.entryDayKey(entry) : (opts && opts.date) || selectedDay || currentDay;
-    const loc = state.locations[date] || '';
+    const loc = entry ? (entry.location || '') : '';
+    const recentLocs = collectRecentLocations().slice(0, 6);
+    const locChipsHtml = recentLocs.length
+      ? '<div class="modal-loc-chips">' + recentLocs.map(function (v) {
+          return '<button type="button" class="modal-loc-chip' + (loc === v ? ' active' : '') + '" data-loc="' + esc(v) + '">' + esc(v) + '</button>';
+        }).join('') + '</div>'
+      : '';
     let start = '09:00';
     let end = entry && entry.endAt == null ? '' : '18:00';
     let nextDay = false;
@@ -641,7 +693,7 @@
       '<label>上班时间<input type="time" id="eStart" value="' + esc(start) + '"></label>' +
       '<label>下班时间<input type="time" id="eEnd" value="' + esc(end) + '"></label>' +
       '<label class="check full"><input type="checkbox" id="eNext"' + (nextDay ? ' checked' : '') + '>下班时间为次日</label>' +
-      '<label class="full">工作地点<input type="text" id="eLoc" list="locOptions" placeholder="例如：公司 3F / 客户现场" value="' + esc(loc) + '"></label>' +
+      '<label class="full">本段工作地点<input type="text" id="eLoc" list="locOptions" placeholder="例如：公司 3F / 客户现场" value="' + esc(loc) + '">' + locChipsHtml + '</label>' +
       '<div class="full muted small hidden" id="entryErr" style="color:#d14545"></div>' +
       '</form>' +
       '<div class="modal-actions">' +
@@ -654,11 +706,22 @@
 
     const box = $('#modalBox');
     const errEl = box.querySelector('#entryErr');
+    const eLocEl = box.querySelector('#eLoc');
     function showErr(msg) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
-
-    box.querySelector('#eDate').addEventListener('change', function () {
-      box.querySelector('#eLoc').value = state.locations[this.value] || '';
+    function syncModalLocChips() {
+      const cur = eLocEl.value.trim();
+      box.querySelectorAll('.modal-loc-chip').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.loc === cur);
+      });
+    }
+    eLocEl.addEventListener('input', syncModalLocChips);
+    box.querySelectorAll('.modal-loc-chip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        eLocEl.value = eLocEl.value.trim() === b.dataset.loc ? '' : b.dataset.loc;
+        syncModalLocChips();
+      });
     });
+
     box.querySelector('[data-act="m-cancel"]').onclick = closeModal;
     if (entry) {
       box.querySelector('[data-act="e-del"]').onclick = async function () {
@@ -669,11 +732,13 @@
       };
     }
     box.querySelector('[data-act="e-save"]').onclick = async function () {
+      const locText = eLocEl.value.trim();
       const input = {
         date: box.querySelector('#eDate').value,
         startTime: box.querySelector('#eStart').value,
         endTime: box.querySelector('#eEnd').value,
-        nextDay: box.querySelector('#eNext').checked
+        nextDay: box.querySelector('#eNext').checked,
+        location: locText
       };
       // 进行中的记录：下班时间留空时只改上班时间点，endAt 保持 null，不结束时段
       if (entry && entry.endAt == null && !input.endTime) {
@@ -684,9 +749,8 @@
         onlyBtn.disabled = true;
         try {
           state = await api.setPunchTime(entry.id, 'start', startIso);
-          const locText0 = box.querySelector('#eLoc').value;
-          if ((state.locations[input.date] || '') !== locText0.trim()) {
-            try { state = await api.setLocation(input.date, locText0); } catch (e2) { /* 地点不影响打卡 */ }
+          if ((entry.location || '') !== locText) {
+            try { state = await api.setEntryLocation(entry.id, locText); } catch (e2) { /* 地点不影响打卡 */ }
           }
           render();
           closeModal();
@@ -705,12 +769,6 @@
       if (entry) ok = await run(api.updateEntry(entry.id, input), '已保存');
       else ok = await run(api.addEntry(input), '已补录');
       if (ok) {
-        const locText = box.querySelector('#eLoc').value;
-        if ((state.locations[input.date] || '') !== locText.trim()) {
-          try {
-            state = await api.setLocation(input.date, locText);
-          } catch (e) { toast(e && e.message ? e.message : '地点保存失败', 'err'); }
-        }
         closeModal();
         render();
       }
@@ -855,18 +913,71 @@
       if (open) {
         const ok = await run(api.clockOut(punchIso), null);
         if (!ok) return;
+        const punchLocEl = $('#punchLocation');
+        if (punchLocEl) {
+          punchLocEl.value = '';
+          syncPunchLocUi();
+        }
         const list = C.sortEntries(state.entries);
         const last = list[list.length - 1];
         toast('已下班（记为 ' + C.formatRange(last) + '）');
         if (snap && !snap.inWindow) openPunchChoice(last, 'end', snap);
       } else {
-        const ok = await run(api.clockIn(punchIso), null);
+        const punchLoc = ($('#punchLocation') && $('#punchLocation').value || '').trim();
+        const ok = await run(api.clockIn(punchIso, punchLoc), null);
         if (!ok) return;
         const entry = openEntryNow();
-        toast('已上班（记为 ' + C.formatTimeOfDay(entry.startAt) + '）');
+        toast('已上班（记为 ' + C.formatTimeOfDay(entry.startAt) + (entry.location ? ' · ' + entry.location : '') + '）');
         if (snap && !snap.inWindow) openPunchChoice(entry, 'start', snap);
       }
     });
+
+    if ($('#punchLocation')) {
+      $('#punchLocation').addEventListener('input', function () {
+        syncPunchLocUi();
+        const open = openEntryNow();
+        if (!open) return;
+        clearTimeout(punchLocTimer);
+        const text = $('#punchLocation').value;
+        punchLocTimer = setTimeout(async function () {
+          try {
+            state = await api.setEntryLocation(open.id, text);
+            renderToday();
+          } catch (e) { /* 地点保存失败不阻断计时 */ }
+        }, 450);
+      });
+    }
+
+    if ($('#btnClearPunchLoc')) {
+      $('#btnClearPunchLoc').addEventListener('click', async function () {
+        const input = $('#punchLocation');
+        if (!input) return;
+        input.value = '';
+        syncPunchLocUi();
+        const open = openEntryNow();
+        if (open) {
+          clearTimeout(punchLocTimer);
+          await run(api.setEntryLocation(open.id, ''), null);
+        }
+      });
+    }
+
+    if ($('#punchLocChips')) {
+      $('#punchLocChips').addEventListener('click', async function (ev) {
+        const chip = ev.target.closest('.loc-chip');
+        if (!chip) return;
+        const input = $('#punchLocation');
+        if (!input) return;
+        const nextVal = input.value.trim() === chip.dataset.loc ? '' : chip.dataset.loc;
+        input.value = nextVal;
+        syncPunchLocUi();
+        const open = openEntryNow();
+        if (open) {
+          clearTimeout(punchLocTimer);
+          await run(api.setEntryLocation(open.id, nextVal), null);
+        }
+      });
+    }
 
     $('#btnQuickAdd').addEventListener('click', function () { openEntryDialog({ date: currentDay }); });
 
@@ -915,7 +1026,8 @@
       const lines = [head.join(',')];
       sum.perDay.filter(function (d) { return d.ms > 0; }).forEach(function (d) {
         const ranges = d.entries.map(function (e) { return C.formatRange(e); }).join(' ');
-        lines.push([d.day, d.weekday, ranges, state.locations[d.day] || '', C.formatHoursDecimal(d.ms),
+        const dayLoc = C.dayLocationsText(d.entries, d.day, state.locations[d.day]);
+        lines.push([d.day, d.weekday, ranges, dayLoc, C.formatHoursDecimal(d.ms),
           d.rate == null ? '' : d.rate, d.earnings == null ? '' : d.earnings,
           (state.notes[d.day] || '').replace(/\r?\n/g, ' ')].map(csvCell).join(','));
       });

@@ -218,7 +218,7 @@ function registerIpc() {
   });
   handle('state:get', state);
 
-  handle('clock:in', function (iso) { store.clockIn(iso || new Date()); return state(); });
+  handle('clock:in', function (iso, location) { store.clockIn(iso || new Date(), location); return state(); });
   handle('clock:out', function (iso) { store.clockOut(iso || new Date()); return state(); });
 
   handle('punch:set-time', function (id, which, isoLocal) {
@@ -228,6 +228,7 @@ function registerIpc() {
 
   handle('entry:add', function (input) { store.addEntry(input); return state(); });
   handle('entry:update', function (id, input) { store.updateEntry(id, input); return state(); });
+  handle('entry:set-location', function (id, text) { store.setEntryLocation(id, text); return state(); });
   handle('entry:delete', function (id) { store.deleteEntry(id); return state(); });
 
   handle('note:set', function (dayKey, text) { store.setNote(dayKey, text); return state(); });
