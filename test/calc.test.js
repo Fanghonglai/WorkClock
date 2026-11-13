@@ -171,35 +171,64 @@ test('isStaleOpen 判断忘记下班的打卡', () => {
   assert.equal(C.isStaleOpen(mk('c', '2026-11-03T09:00:00', '2026-11-03T18:00:00'), now), false);
 });
 
-test('roundPunchMs 按最近整点归整，正好半点保留', () => {
+test('snapPunch 按 48 个半点刻度 ±10 分钟判定，左闭右闭', () => {
+  const snap = (s) => C.snapPunch(C.parseLocal(s).getTime());
+  const hit = (s) => snap(s).inWindow;
+  assert.equal(hit('2026-11-04T09:00:00'), true);
+  assert.equal(hit('2026-11-04T09:10:00'), true);
+  assert.equal(hit('2026-11-04T09:11:00'), false);
+  assert.equal(hit('2026-11-04T09:19:00'), false);
+  assert.equal(hit('2026-11-04T09:20:00'), true);
+  assert.equal(hit('2026-11-04T09:30:00'), true);
+  assert.equal(hit('2026-11-04T09:40:00'), true);
+  assert.equal(hit('2026-11-04T09:41:00'), false);
+  assert.equal(hit('2026-11-04T09:45:00'), false);
+  assert.equal(hit('2026-11-04T09:50:00'), true);
+  const s = snap('2026-11-04T09:14:00');
+  assert.equal(s.inWindow, false);
+  assert.equal(C.toLocalIso(new Date(s.minuteMs)), '2026-11-04T09:14:00');
+  assert.equal(C.toLocalIso(new Date(s.snappedMs)), '2026-11-04T09:14:00');
+  assert.deepEqual(s.candidates.map((ms) => C.toLocalIso(new Date(ms))),
+    ['2026-11-04T09:00:00', '2026-11-04T09:30:00']);
+  assert.equal(C.toLocalIso(new Date(s.suggestedMs)), '2026-11-04T09:00:00');
+});
+
+test('roundPunchMs 命中窗口归刻度，窗口外保留实际分钟', () => {
   const iso = (s) => C.toLocalIso(C.roundPunchDate(C.parseLocal(s)));
   assert.equal(iso('2026-11-04T10:00:00'), '2026-11-04T10:00:00');
   assert.equal(iso('2026-11-04T10:05:00'), '2026-11-04T10:00:00');
-  assert.equal(iso('2026-11-04T10:29:59'), '2026-11-04T10:00:00');
-  assert.equal(iso('2026-11-04T10:30:00'), '2026-11-04T10:30:00');
-  assert.equal(iso('2026-11-04T10:30:01'), '2026-11-04T11:00:00');
-  assert.equal(iso('2026-11-04T10:31:00'), '2026-11-04T11:00:00');
-  assert.equal(iso('2026-11-04T10:59:59'), '2026-11-04T11:00:00');
-  assert.equal(iso('2026-11-04T23:45:00'), '2026-11-05T00:00:00');
-  assert.equal(iso('2026-11-04T00:20:00'), '2026-11-04T00:00:00');
+  assert.equal(iso('2026-11-04T10:10:00'), '2026-11-04T10:00:00');
+  assert.equal(iso('2026-11-04T10:11:00'), '2026-11-04T10:11:00');
+  assert.equal(iso('2026-11-04T10:19:00'), '2026-11-04T10:19:00');
+  assert.equal(iso('2026-11-04T10:20:00'), '2026-11-04T10:30:00');
+  assert.equal(iso('2026-11-04T10:30:01'), '2026-11-04T10:30:00');
+  assert.equal(iso('2026-11-04T10:40:00'), '2026-11-04T10:30:00');
+  assert.equal(iso('2026-11-04T10:41:59'), '2026-11-04T10:41:00');
+  assert.equal(iso('2026-11-04T23:55:00'), '2026-11-05T00:00:00');
+  assert.equal(iso('2026-11-04T00:14:00'), '2026-11-04T00:14:00');
 });
 
-test('进行中打卡按归整后的当前时间累计', () => {
+test('进行中打卡按真实当前时间持续累计，不再归集 now', () => {
   const open = mk('e', '2026-11-04T09:00:00', null);
   const now = C.parseLocal('2026-11-04T10:05:00').getTime();
-  assert.equal(C.entryEndMs(open, now), C.parseLocal('2026-11-04T10:00:00').getTime());
-  assert.equal(C.entryDurationMs(open, now), 3600 * 1000);
+  assert.equal(C.entryEndMs(open, now), now);
+  assert.equal(C.entryDurationMs(open, now), 65 * 60 * 1000);
   assert.equal(C.entryDurationMs(open), 0);
 });
 
-test('validateEntryInput 的 round 选项归整补录时间', () => {
-  const v = C.validateEntryInput({ date: '2026-11-04', startTime: '10:05', endTime: '11:20' }, { round: true });
+test('validateEntryInput 的 round 选项：窗口内归刻度，窗口外按填写值', () => {
+  const v = C.validateEntryInput({ date: '2026-11-04', startTime: '10:05', endTime: '11:35' }, { round: true });
   assert.equal(v.ok, true);
   assert.equal(v.startAt, '2026-11-04T10:00:00');
-  assert.equal(v.endAt, '2026-11-04T11:00:00');
-  assert.equal(v.durationMs, 3600 * 1000);
+  assert.equal(v.endAt, '2026-11-04T11:30:00');
+  assert.equal(v.durationMs, 1.5 * 3600 * 1000);
   const endpoint = C.validateEntryInput({ date: '2026-11-04', startTime: '10:00', endTime: '10:30' }, { round: true });
   assert.equal(endpoint.durationMs, 30 * 60 * 1000);
-  assert.equal(C.validateEntryInput({ date: '2026-11-04', startTime: '10:05', endTime: '10:20' }, { round: true }).ok, false);
-  assert.equal(C.validateEntryInput({ date: '2026-11-04', startTime: '10:05', endTime: '10:20' }).ok, true);
+  const outside = C.validateEntryInput({ date: '2026-11-04', startTime: '10:14', endTime: '10:16' }, { round: true });
+  assert.equal(outside.ok, true);
+  assert.equal(outside.startAt, '2026-11-04T10:14:00');
+  assert.equal(outside.endAt, '2026-11-04T10:16:00');
+  assert.equal(outside.durationMs, 2 * 60 * 1000);
+  assert.equal(C.validateEntryInput({ date: '2026-11-04', startTime: '10:05', endTime: '10:08' }, { round: true }).ok, false);
+  assert.equal(C.validateEntryInput({ date: '2026-11-04', startTime: '10:14', endTime: '10:16' }).ok, true);
 });

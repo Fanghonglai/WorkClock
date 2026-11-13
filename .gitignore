@@ -9,7 +9,16 @@ dist/
 .cache/
 *.asar
 
-# 若要把打包好的安装程序放到仓库根目录一起上传，删掉下面两行（单文件需小于 100 MB）
+# 安装包构建中间产物：build-installer.ps1 / asar.ps1 会在项目根生成
+/win-unpacked/
+/app/
+/obj/
+/asar-header.json
+
+# 本机工作记忆（可选：想把项目笔记一起纳入版本管理就删掉这一行）
+/.workbuddy/
+
+# 安装包与压缩包：作为 GitHub Releases 资产上传，不进 Git 仓库
 *.exe
 *.zip
 

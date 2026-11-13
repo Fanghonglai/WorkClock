@@ -218,8 +218,13 @@ function registerIpc() {
   });
   handle('state:get', state);
 
-  handle('clock:in', function () { store.clockIn(new Date()); return state(); });
-  handle('clock:out', function () { store.clockOut(new Date()); return state(); });
+  handle('clock:in', function (iso) { store.clockIn(iso || new Date()); return state(); });
+  handle('clock:out', function (iso) { store.clockOut(iso || new Date()); return state(); });
+
+  handle('punch:set-time', function (id, which, isoLocal) {
+    store.setPunchTime(id, which, isoLocal);
+    return state();
+  });
 
   handle('entry:add', function (input) { store.addEntry(input); return state(); });
   handle('entry:update', function (id, input) { store.updateEntry(id, input); return state(); });

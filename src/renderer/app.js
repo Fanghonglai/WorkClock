@@ -508,12 +508,111 @@
     });
   }
 
+  /**
+   * 落在半点刻度 ±10 分钟窗口之外时弹出的「单点选择页」。
+   * 只让用户决定本次打卡时间点：没有下班时间输入框、不做整段校验。
+   * 确认后只写一个端点，另一端保持原样；进行中的时段继续计时。
+   */
+  function openPunchChoice(entry, which, snap) {
+    if (!entry || !snap) return;
+    const label = which === 'start' ? '上班' : '下班';
+    const actual = C.formatTimeOfDay(C.toLocalIso(new Date(snap.minuteMs)));
+    const tickButtons = snap.candidates.map(function (ms) {
+      const t = C.formatTimeOfDay(C.toLocalIso(new Date(ms)));
+      return '<button type="button" class="btn ghost mini pc-tick" data-time="' + esc(t) + '">' + esc(t) + '</button>';
+    }).join('');
+    openModal(
+      '<h2>这次' + label + '打卡记在几点？</h2>' +
+      '<p class="m-sub">实际打卡 ' + esc(actual) + '，不在半点刻度前后 10 分钟范围内，所以不自动归整。' +
+      '选一个时间点，只改这次' + esc(label) + '打卡；' +
+      (which === 'start' ? '时段继续计时，下班打卡不受影响。' : '上班时间保持原样。') + '</p>' +
+      '<form id="pcForm" class="form-grid">' +
+      '<div class="full muted small">附近的半点刻度</div>' +
+      '<div class="full" style="display:flex;gap:8px;flex-wrap:wrap">' + tickButtons + '</div>' +
+      '<label class="full">其他时间（可填任意分钟）<input type="time" id="pcOther"></label>' +
+      '<div class="full muted small hidden" id="pcErr" style="color:#d14545"></div>' +
+      '</form>' +
+      '<div class="modal-actions">' +
+      '<span class="spacer"></span>' +
+      '<button class="btn ghost" data-act="pc-cancel">按实际时间 ' + esc(actual) + '</button>' +
+      '<button class="btn primary" data-act="pc-save">确定</button>' +
+      '</div>'
+    );
+
+    const box = $('#modalBox');
+    const errEl = box.querySelector('#pcErr');
+    const otherEl = box.querySelector('#pcOther');
+    const saveBtn = box.querySelector('[data-act="pc-save"]');
+    let picked = '';
+    function showErr(msg) { errEl.textContent = msg; errEl.classList.remove('hidden'); }
+    function clearErr() { errEl.textContent = ''; errEl.classList.add('hidden'); }
+    function clearTicks() {
+      box.querySelectorAll('.pc-tick').forEach(function (x) {
+        x.classList.remove('primary');
+        x.classList.add('ghost');
+      });
+    }
+
+    box.querySelectorAll('.pc-tick').forEach(function (b) {
+      b.addEventListener('click', function () {
+        picked = b.dataset.time;
+        otherEl.value = '';
+        clearTicks();
+        b.classList.remove('ghost');
+        b.classList.add('primary');
+        clearErr();
+      });
+    });
+    otherEl.addEventListener('input', function () {
+      picked = '';
+      clearTicks();
+      clearErr();
+    });
+    box.querySelector('#pcForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      saveBtn.click();
+    });
+    box.querySelector('[data-act="pc-cancel"]').onclick = function () {
+      closeModal();
+      toast('已按实际时间 ' + actual + ' 记录，可随时点「编辑」调整');
+    };
+    saveBtn.onclick = async function () {
+      const time = picked || otherEl.value;
+      if (!/^\d{2}:\d{2}$/.test(time || '')) {
+        showErr('请选一个刻度，或在「其他时间」里填写任意分钟');
+        return;
+      }
+      const baseDay = C.entryDayKey(entry) || C.dateKey(new Date());
+      let iso = baseDay + 'T' + time + ':00';
+      if (which === 'end') {
+        const startDt = C.parseLocal(entry.startAt);
+        const endDt = C.parseLocal(iso);
+        if (startDt && endDt && endDt.getTime() <= startDt.getTime() &&
+            startDt.getHours() >= 12 && endDt.getHours() <= 6) {
+          iso = C.toLocalIso(new Date(endDt.getTime() + 24 * 3600 * 1000));
+        }
+      }
+      saveBtn.disabled = true;
+      try {
+        state = await api.setPunchTime(entry.id, which, iso);
+        render();
+        closeModal();
+        toast(which === 'start'
+          ? '上班时间已记为 ' + time + '，工时继续累计'
+          : '下班时间已记为 ' + time + '，上班时间未改动');
+      } catch (e) {
+        saveBtn.disabled = false;
+        showErr(e && e.message ? e.message : '这个时间点不能用，请换一个');
+      }
+    };
+  }
+
   function openEntryDialog(opts) {
     const entry = opts && opts.entry;
     const date = entry ? C.entryDayKey(entry) : (opts && opts.date) || selectedDay || currentDay;
     const loc = state.locations[date] || '';
     let start = '09:00';
-    let end = '18:00';
+    let end = entry && entry.endAt == null ? '' : '18:00';
     let nextDay = false;
     if (entry) {
       start = timeOf(entry.startAt);
@@ -522,13 +621,12 @@
         const s = C.parseLocal(entry.startAt);
         const e = C.parseLocal(entry.endAt);
         nextDay = !!s && !!e && C.dateKey(e) !== C.dateKey(s);
-      } else {
-        end = timeOf(C.toLocalIso(new Date()));
       }
     }
     openModal(
       '<h2>' + (entry ? '编辑打卡记录' : '补录时段') + '</h2>' +
-      '<p class="m-sub">时间会按整点归整（不足半小时取最近整点，正好半点按实际时间）；工时按开始日期归属本日，跨零点请勾选“次日”。</p>' +
+      '<p class="m-sub">半点刻度前后 10 分钟内会归到该刻度，范围外按你填写的时间记录；工时按开始日期归属本日，跨零点请勾选“次日”。' +
+      (entry && entry.endAt == null ? '这条记录仍在进行中：下班时间留空就只改上班时间，不会结束时段。' : '') + '</p>' +
       '<form id="entryForm" class="form-grid">' +
       '<label class="full">日期<input type="date" id="eDate" value="' + esc(date) + '"></label>' +
       '<label>上班时间<input type="time" id="eStart" value="' + esc(start) + '"></label>' +
@@ -568,6 +666,28 @@
         endTime: box.querySelector('#eEnd').value,
         nextDay: box.querySelector('#eNext').checked
       };
+      // 进行中的记录：下班时间留空时只改上班时间点，endAt 保持 null，不结束时段
+      if (entry && entry.endAt == null && !input.endTime) {
+        const startDt = C.parseLocal(input.date + 'T' + input.startTime + ':00');
+        if (!startDt) { showErr('请填写正确的上班时间（HH:mm）'); return; }
+        const startIso = C.toLocalIso(C.roundPunchDate(startDt));
+        const onlyBtn = box.querySelector('[data-act="e-save"]');
+        onlyBtn.disabled = true;
+        try {
+          state = await api.setPunchTime(entry.id, 'start', startIso);
+          const locText0 = box.querySelector('#eLoc').value;
+          if ((state.locations[input.date] || '') !== locText0.trim()) {
+            try { state = await api.setLocation(input.date, locText0); } catch (e2) { /* 地点不影响打卡 */ }
+          }
+          render();
+          closeModal();
+          toast('上班时间已更新，时段仍在进行中');
+        } catch (e) {
+          onlyBtn.disabled = false;
+          showErr(e && e.message ? e.message : '保存失败');
+        }
+        return;
+      }
       const v = C.validateEntryInput(input, { round: true });
       if (!v.ok) { showErr(v.error); return; }
       const btn = box.querySelector('[data-act="e-save"]');
@@ -691,18 +811,22 @@
 
     $('#btnPunch').addEventListener('click', async function () {
       if (busy) return;
+      const snap = C.snapPunch(Date.now());
+      const punchIso = snap ? C.toLocalIso(new Date(snap.minuteMs)) : null;
       const open = openEntryNow();
       if (open) {
-        const ok = await run(api.clockOut(), null);
-        if (ok) {
-          const list = C.sortEntries(state.entries);
-          const last = list[list.length - 1];
-          const dms = last ? C.entryDurationMs(last) : 0;
-          toast('已下班（记为 ' + C.formatRange(last) + '）' + (dms > 0 ? '' : '，不足半小时按 0 计'));
-        }
+        const ok = await run(api.clockOut(punchIso), null);
+        if (!ok) return;
+        const list = C.sortEntries(state.entries);
+        const last = list[list.length - 1];
+        toast('已下班（记为 ' + C.formatRange(last) + '）');
+        if (snap && !snap.inWindow) openPunchChoice(last, 'end', snap);
       } else {
-        const ok = await run(api.clockIn(), null);
-        if (ok) toast('已上班（记为 ' + C.formatTimeOfDay(openEntryNow().startAt) + '）');
+        const ok = await run(api.clockIn(punchIso), null);
+        if (!ok) return;
+        const entry = openEntryNow();
+        toast('已上班（记为 ' + C.formatTimeOfDay(entry.startAt) + '）');
+        if (snap && !snap.inWindow) openPunchChoice(entry, 'start', snap);
       }
     });
 

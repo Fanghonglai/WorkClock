@@ -1,6 +1,6 @@
 {
   "name": "work-clock",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "每日打卡记录工时，自动统计月工时与收入",
   "productName": "工时打卡",
   "main": "src/main/main.js",

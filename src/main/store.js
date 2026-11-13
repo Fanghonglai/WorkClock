@@ -297,7 +297,8 @@ class Store {
 
   clockIn(nowDate) {
     this._requireLoaded();
-    const now = C.roundPunchDate(nowDate || new Date());
+    const source = typeof nowDate === 'string' ? C.parseLocal(nowDate) : nowDate;
+    const now = C.roundPunchDate(source || new Date());
     const open = C.openEntry(this.state.entries);
     if (open) {
       throw new StoreError('已有未下班的打卡（' + C.formatTimeOfDay(open.startAt) + ' 上班），请先下班打卡或作废该记录');
@@ -311,12 +312,13 @@ class Store {
 
   clockOut(nowDate) {
     this._requireLoaded();
-    const now = C.roundPunchDate(nowDate || new Date());
+    const source = typeof nowDate === 'string' ? C.parseLocal(nowDate) : nowDate;
+    const now = C.roundPunchDate(source || new Date());
     const open = C.openEntry(this.state.entries);
     if (!open) throw new StoreError('当前没有进行中的打卡，请先点“上班打卡”');
     const start = C.entryStartMs(open);
     const endMs = now.getTime();
-    if (start != null && endMs < start) throw new StoreError('下班时间必须晚于上班时间');
+    if (start != null && endMs <= start) throw new StoreError('下班时间不晚于上班时间，请稍后再打卡或手动调整');
     if (start != null && endMs - start > C.MAX_MS) throw new StoreError('单段工时超过 24 小时，请手动修正该记录');
     const endIso = C.toLocalIso(now);
     this._assertNoOverlap(open.startAt, endIso, open.id);
@@ -346,6 +348,40 @@ class Store {
     this._assertNoOverlap(v.startAt, v.endAt, id);
     entry.startAt = v.startAt;
     entry.endAt = v.endAt;
+    this.state.entries = C.sortEntries(this.state.entries);
+    this._write(this.state);
+    return entry;
+  }
+
+  /**
+   * 单点写入：窗口外打卡弹出「单点选择页」后，只改这一个端点。
+   * which = 'start' 时只写 startAt，进行中的记录 endAt 保持 null，绝不生成下班时间；
+   * which = 'end' 时只写 endAt，startAt 原样不动。不做整段编辑、不牵连另一端。
+   */
+  setPunchTime(id, which, isoLocal) {
+    this._requireLoaded();
+    const entry = this.state.entries.filter(function (e) { return e.id === id; })[0];
+    if (!entry) throw new StoreError('找不到这条打卡记录');
+    if (which !== 'start' && which !== 'end') throw new StoreError('要调整的打卡端点不正确');
+    const dt = C.parseLocal(isoLocal);
+    if (!dt) throw new StoreError('请选择正确的打卡时间');
+    const value = C.toLocalIso(dt);
+    const nextStart = which === 'start' ? value : entry.startAt;
+    const nextEnd = which === 'end' ? value : entry.endAt;
+
+    if (nextEnd != null) {
+      const s = C.parseLocal(nextStart);
+      const e = C.parseLocal(nextEnd);
+      if (!s || !e || e.getTime() <= s.getTime()) {
+        throw new StoreError('这个时间点不晚于上班时间，请换一个时间（只调整本次打卡点）');
+      }
+      if (e.getTime() - s.getTime() > C.MAX_MS) {
+        throw new StoreError('单段工时不能超过 24 小时，请换一个时间');
+      }
+      this._assertNoOverlap(nextStart, nextEnd, id);
+    }
+    if (which === 'start') entry.startAt = nextStart;
+    else entry.endAt = nextEnd;
     this.state.entries = C.sortEntries(this.state.entries);
     this._write(this.state);
     return entry;

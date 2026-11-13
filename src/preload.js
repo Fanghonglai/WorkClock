@@ -17,8 +17,9 @@ function call(channel) {
 contextBridge.exposeInMainWorld('workclock', {
   info: function () { return call('app:info'); },
   getState: function () { return call('state:get'); },
-  clockIn: function () { return call('clock:in'); },
-  clockOut: function () { return call('clock:out'); },
+  clockIn: function (iso) { return iso ? call('clock:in', iso) : call('clock:in'); },
+  clockOut: function (iso) { return iso ? call('clock:out', iso) : call('clock:out'); },
+  setPunchTime: function (id, which, isoLocal) { return call('punch:set-time', id, which, isoLocal); },
   addEntry: function (input) { return call('entry:add', input); },
   updateEntry: function (id, input) { return call('entry:update', id, input); },
   deleteEntry: function (id) { return call('entry:delete', id); },

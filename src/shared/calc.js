@@ -8,6 +8,8 @@
   var MAX_MS = 24 * 3600 * 1000;
   var HOUR_MS = 3600 * 1000;
   var MIN_MS = 60 * 1000;
+  var SNAP_STEP_MIN = 30;   // 半点刻度间隔：整点与半点，全天 48 个
+  var SNAP_WINDOW_MIN = 10; // 每个刻度前后各 10 分钟，两端都含
   var WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
   function pad2(n) {
@@ -36,19 +38,44 @@
   }
 
   /**
-   * 计时归整：不足半小时按最近的小时取。
-   * 分钟 0–29 → 当前整点；31–59 → 下一整点；
-   * 正好 30 分整（含 0 秒 0 毫秒）视为“端口”，保留 30 分按实际时间计算。
-   * 半点但带秒/毫秒（如 10:30:01）按“超过半点”处理 → 下一整点。
+   * 打卡归集：全天 48 个半点刻度（HH:00 / HH:30），每个刻度认前后各 10 分钟、两端都含。
+   * 先把打卡时刻截断到分钟（秒与毫秒不参与），再取它所在半小时区间的两个端点刻度。
+   * 距离最近刻度 <= 10 分钟 → 改写为该刻度（跨零点时自然落到次日 00:00）。
+   * 落在所有窗口之外 → 不归集、不猜测，保留实际时刻；界面会弹「单点选择页」
+   * 只让用户决定这一个打卡时间点，另一端保持原样。
+   * 返回对象：
+   *   minuteMs    截断到分钟的实际时刻
+   *   inWindow    是否命中刻度窗口
+   *   snappedMs   最终应写入的时刻（命中为刻度，未命中为实际时刻）
+   *   suggestedMs 距离最近的刻度（未命中时仅作候选提示，不自动采用）
+   *   candidates  附近两个刻度（绝对毫秒），供单点选择页展示
    */
-  function roundPunchMs(ms) {
-    if (typeof ms !== 'number' || !isFinite(ms)) return ms;
+  function snapPunch(ms) {
+    if (typeof ms !== 'number' || !isFinite(ms)) return null;
     var dt = new Date(ms);
-    var mi = dt.getMinutes();
-    var leftover = mi === 30 && dt.getSeconds() === 0 && dt.getMilliseconds() === 0;
-    if (leftover) return ms;
-    var base = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), dt.getHours(), 0, 0, 0).getTime();
-    return mi < 30 ? base : base + HOUR_MS;
+    var minuteMs = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(),
+      dt.getHours(), dt.getMinutes(), 0, 0).getTime();
+    var dayBase = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 0, 0, 0, 0).getTime();
+    var step = SNAP_STEP_MIN * MIN_MS;
+    var idx = Math.floor((minuteMs - dayBase) / step);
+    var low = dayBase + idx * step;
+    var high = low + step;
+    var dLow = minuteMs - low;
+    var dHigh = high - minuteMs;
+    var suggestedMs = dLow <= dHigh ? low : high;
+    var inWindow = Math.min(dLow, dHigh) <= SNAP_WINDOW_MIN * MIN_MS;
+    return {
+      minuteMs: minuteMs,
+      inWindow: inWindow,
+      snappedMs: inWindow ? suggestedMs : minuteMs,
+      suggestedMs: suggestedMs,
+      candidates: [low, high]
+    };
+  }
+
+  function roundPunchMs(ms) {
+    var snap = snapPunch(ms);
+    return snap ? snap.snappedMs : ms;
   }
 
   function roundPunchDate(dt) {
@@ -114,7 +141,8 @@
 
   function entryEndMs(entry, nowMs) {
     if (!entry) return null;
-    if (entry.endAt == null) return typeof nowMs === 'number' ? roundPunchMs(nowMs) : null;
+    // 进行中的时段按真实当前时刻持续累计，不把「现在」再做一次归集
+    if (entry.endAt == null) return typeof nowMs === 'number' ? nowMs : null;
     var dt = parseLocal(entry.endAt);
     return dt ? dt.getTime() : null;
   }
@@ -287,7 +315,7 @@
       return {
         ok: false,
         error: doRound
-          ? '按整点归整后，下班时间不晚于上班时间，请调整时间（正好半点会按实际时间计算）'
+          ? '归集后下班时间不晚于上班时间，请调整时间（刻度前后 10 分钟内归到刻度，范围外按填写时间记录）'
           : '下班时间必须晚于上班时间（跨夜请勾选“次日”）'
       };
     }
@@ -376,6 +404,9 @@
     pad2: pad2,
     parseLocal: parseLocal,
     toLocalIso: toLocalIso,
+    SNAP_STEP_MIN: SNAP_STEP_MIN,
+    SNAP_WINDOW_MIN: SNAP_WINDOW_MIN,
+    snapPunch: snapPunch,
     roundPunchMs: roundPunchMs,
     roundPunchDate: roundPunchDate,
     dateKey: dateKey,

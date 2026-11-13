@@ -13,7 +13,7 @@ namespace WorkClockSetup
         public const string AppName = "工时打卡";
         public const string ExeName = "工时打卡.exe";
         public const string ProcName = "工时打卡";
-        public const string Version = "1.0.4";
+        public const string Version = "1.0.5";
         public const string Publisher = "Fanghonglai";
         public const string RegKey = @"Software\WorkClock";
         public const string UninstKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\WorkClock";

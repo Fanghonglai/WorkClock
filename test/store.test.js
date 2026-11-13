@@ -226,12 +226,12 @@ test('窗口位置持久化', () => {
   });
 });
 
-test('打卡时间按整点归整，半点端口保留', () => {
+test('打卡时间在刻度 ±10 分钟内归刻度，窗口外保留实际分钟', () => {
   withStore((store) => {
     const e = store.clockIn(new Date(2026, 10, 4, 10, 5, 0));
     assert.equal(e.startAt, '2026-11-04T10:00:00');
-    assert.equal(store.clockOut(new Date(2026, 10, 4, 18, 40, 0)).endAt, '2026-11-04T19:00:00');
-    assert.equal(C.entryDurationMs(store.state.entries[0]), 9 * 3600 * 1000);
+    assert.equal(store.clockOut(new Date(2026, 10, 4, 18, 35, 0)).endAt, '2026-11-04T18:30:00');
+    assert.equal(C.entryDurationMs(store.state.entries[0]), 8.5 * 3600 * 1000);
   });
   withStore((store) => {
     const e = store.clockIn(new Date(2026, 10, 4, 9, 30, 0));
@@ -239,26 +239,58 @@ test('打卡时间按整点归整，半点端口保留', () => {
     assert.equal(store.clockOut(new Date(2026, 10, 4, 12, 30, 0)).endAt, '2026-11-04T12:30:00');
     assert.equal(C.entryDurationMs(store.state.entries[0]), 3 * 3600 * 1000);
   });
-});
-
-test('归整后上下班同一整点记为 0 分钟', () => {
   withStore((store) => {
-    store.clockIn(new Date(2026, 10, 4, 10, 5, 0));
-    const e = store.clockOut(new Date(2026, 10, 4, 10, 10, 0));
-    assert.equal(e.startAt, e.endAt);
-    assert.equal(C.entryDurationMs(e), 0);
+    const e = store.clockIn(new Date(2026, 10, 4, 9, 14, 0));
+    assert.equal(e.startAt, '2026-11-04T09:14:00');
+    assert.equal(e.endAt, null);
+    assert.equal(store.clockOut(new Date(2026, 10, 4, 18, 44, 0)).endAt, '2026-11-04T18:44:00');
   });
 });
 
-test('补录与编辑时间也按整点归整', () => {
+test('归集后同点不生成 0 时长段，记录保持进行中', () => {
   withStore((store) => {
-    const e = store.addEntry({ date: '2026-11-04', startTime: '09:10', endTime: '12:20' });
+    store.clockIn(new Date(2026, 10, 4, 10, 5, 0));
+    assert.throws(() => store.clockOut(new Date(2026, 10, 4, 10, 8, 0)), /不晚于/);
+    assert.equal(store.state.entries[0].endAt, null);
+  });
+});
+
+test('补录与编辑：窗口内归刻度，窗口外按填写值', () => {
+  withStore((store) => {
+    const e = store.addEntry({ date: '2026-11-04', startTime: '09:10', endTime: '12:35' });
     assert.equal(e.startAt, '2026-11-04T09:00:00');
-    assert.equal(e.endAt, '2026-11-04T12:00:00');
+    assert.equal(e.endAt, '2026-11-04T12:30:00');
     store.updateEntry(e.id, { date: '2026-11-04', startTime: '09:30', endTime: '12:30' });
     assert.equal(store.state.entries[0].startAt, '2026-11-04T09:30:00');
     assert.equal(store.state.entries[0].endAt, '2026-11-04T12:30:00');
-    assert.throws(() => store.addEntry({ date: '2026-11-05', startTime: '09:10', endTime: '09:20' }), /归整/);
+    assert.throws(() => store.addEntry({ date: '2026-11-05', startTime: '09:05', endTime: '09:08' }), /归集/);
+    const outside = store.addEntry({ date: '2026-11-05', startTime: '14:14', endTime: '14:44' });
+    assert.equal(outside.startAt, '2026-11-05T14:14:00');
+    assert.equal(outside.endAt, '2026-11-05T14:44:00');
+  });
+});
+
+test('单点写入只改一个端点，进行中状态与下班打卡不受影响', () => {
+  withStore((store) => {
+    const e = store.clockIn(new Date(2026, 10, 4, 9, 14, 0));
+    assert.equal(e.startAt, '2026-11-04T09:14:00');
+    assert.equal(e.endAt, null);
+    store.setPunchTime(e.id, 'start', '2026-11-04T09:00:00');
+    assert.equal(store.state.entries[0].startAt, '2026-11-04T09:00:00');
+    assert.equal(store.state.entries[0].endAt, null);
+    const out = store.clockOut(new Date(2026, 10, 4, 18, 5, 0));
+    assert.equal(out.startAt, '2026-11-04T09:00:00');
+    assert.equal(out.endAt, '2026-11-04T18:00:00');
+    assert.equal(C.entryDurationMs(out), 9 * 3600 * 1000);
+  });
+  withStore((store) => {
+    const e = store.clockIn(new Date(2026, 10, 4, 9, 0, 0));
+    store.clockOut(new Date(2026, 10, 4, 18, 14, 0));
+    assert.equal(store.state.entries[0].endAt, '2026-11-04T18:14:00');
+    store.setPunchTime(e.id, 'end', '2026-11-04T18:30:00');
+    assert.equal(store.state.entries[0].startAt, '2026-11-04T09:00:00');
+    assert.equal(store.state.entries[0].endAt, '2026-11-04T18:30:00');
+    assert.throws(() => store.setPunchTime(e.id, 'end', '2026-11-04T08:00:00'), /不晚于/);
   });
 });
 
